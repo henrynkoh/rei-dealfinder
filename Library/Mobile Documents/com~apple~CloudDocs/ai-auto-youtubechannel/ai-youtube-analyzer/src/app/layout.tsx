@@ -20,6 +20,11 @@ export default function RootLayout({
         <main className="container">
           {children}
         </main>
+        <footer className="footer">
+          <div className="container">
+            <p>&copy; {new Date().getFullYear()} YouTube Channel Analyzer</p>
+          </div>
+        </footer>
       </body>
     </html>
   )

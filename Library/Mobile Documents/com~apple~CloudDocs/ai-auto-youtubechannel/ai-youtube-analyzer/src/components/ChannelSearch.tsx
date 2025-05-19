@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, FormEvent } from 'react'
+import React, { useState, FormEvent } from 'react'
 import { ChannelSearchProps } from '@/lib/types'
 
 export default function ChannelSearch({ onSearch, isLoading }: ChannelSearchProps) {
@@ -16,13 +16,21 @@ export default function ChannelSearch({ onSearch, isLoading }: ChannelSearchProp
     let channelId = channelInput.trim()
     
     // Check if input is a URL
-    if (channelId.includes('youtube.com/') || channelId.includes('youtu.be/')) {
-      // Extract channel ID from URL
-      const urlPattern = /(@[a-zA-Z0-9_-]+)/
-      const match = channelId.match(urlPattern)
+    if (channelId.includes('youtube.com/')) {
+      // Try to extract channel handle (@username)
+      const handlePattern = /youtube\.com\/@([a-zA-Z0-9_-]+)/
+      const handleMatch = channelId.match(handlePattern)
       
-      if (match && match[1]) {
-        channelId = match[1]
+      if (handleMatch && handleMatch[1]) {
+        channelId = '@' + handleMatch[1]
+      } else {
+        // Try to extract channel ID
+        const channelPattern = /youtube\.com\/channel\/([a-zA-Z0-9_-]+)/
+        const channelMatch = channelId.match(channelPattern)
+        
+        if (channelMatch && channelMatch[1]) {
+          channelId = channelMatch[1]
+        }
       }
     }
     
@@ -31,8 +39,8 @@ export default function ChannelSearch({ onSearch, isLoading }: ChannelSearchProp
 
   return (
     <div>
-      <h2>Enter YouTube Channel</h2>
-      <p>Enter a YouTube channel ID (e.g., @channelname) or full channel URL</p>
+      <h2>유튜브 채널 검색</h2>
+      <p>유튜브 채널 ID (예: @channelname) 또는 채널 URL을 입력하세요</p>
       
       <form onSubmit={handleSubmit}>
         <input
@@ -40,7 +48,7 @@ export default function ChannelSearch({ onSearch, isLoading }: ChannelSearchProp
           className="input"
           value={channelInput}
           onChange={(e) => setChannelInput(e.target.value)}
-          placeholder="Channel ID or URL (e.g., @channelname)"
+          placeholder="채널 ID 또는 URL (예: @channelname)"
           disabled={isLoading}
         />
         
@@ -49,7 +57,7 @@ export default function ChannelSearch({ onSearch, isLoading }: ChannelSearchProp
           className="button"
           disabled={isLoading || !channelInput.trim()}
         >
-          {isLoading ? 'Loading...' : 'Analyze Channel'}
+          {isLoading ? '로딩 중...' : '채널 분석하기'}
         </button>
       </form>
     </div>
