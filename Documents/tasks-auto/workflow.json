@@ -1,0 +1,390 @@
+{
+  "name": "Invoice Processing Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "mode": "custom",
+        "expression": "0 */1 * * * *"
+      },
+      "id": "cron-node-1",
+      "name": "Check Every Minute",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const fs = require('fs');\nconst path = require('path');\nconst dir = process.env.INVOICE_WATCH_PATH || './invoices';\nconst processedFile = './.processed_invoices.json';\nlet processed = [];\nif (fs.existsSync(processedFile)) {\n  processed = JSON.parse(fs.readFileSync(processedFile, 'utf8'));\n}\nconst files = fs.readdirSync(dir).filter(f => f.endsWith('.txt') || f.endsWith('.pdf'));\nconst newFiles = files.filter(f => !processed.includes(f));\nif (newFiles.length === 0) {\n  return [];\n}\n// Mark as processed\nfs.writeFileSync(processedFile, JSON.stringify([...processed, ...newFiles], null, 2));\nreturn newFiles.map(file => ({ json: { fileName: file, filePath: path.join(dir, file) } }));"
+      },
+      "id": "code-node-1",
+      "name": "Scan Invoices Folder",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.fileName }}",
+              "operation": "exists"
+            }
+          ]
+        }
+      },
+      "id": "9i0j1k2l-3m4n-5o6p-7q8r-s9t0u1v2w3x4",
+      "name": "Validate File",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        460,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "headerAuth",
+        "headerParameters": [
+          {
+            "name": "Authorization",
+            "value": "Bearer {{ $env.OPENAI_API_KEY }}"
+          },
+          {
+            "name": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "bodyParameters": [
+          {
+            "name": "model",
+            "value": "gpt-4"
+          },
+          {
+            "name": "messages",
+            "value": "[{'role':'system','content':'You are an AI assistant specialized in extracting structured data from invoices. Extract key information including invoice number, date, vendor details, line items, amounts, and any other relevant invoice data. Return the data in a structured JSON format. If any field is unclear or missing, mark it as null.'},{'role':'user','content':'Invoice text:\n' + $json.fileContent}]"
+          },
+          {
+            "name": "temperature",
+            "value": 0.1
+          }
+        ],
+        "options": {
+          "bodyContentType": "json"
+        }
+      },
+      "id": "http-invoice-data",
+      "name": "Extract Invoice Data (HTTP)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Data Validation\nconst data = $input.first().json;\n\n// Required fields\nconst requiredFields = ['invoiceNumber', 'date', 'vendor', 'totalAmount'];\nconst missingFields = requiredFields.filter(field => !data[field]);\n\nif (missingFields.length > 0) {\n  throw new Error(`Missing required fields: ${missingFields.join(', ')}`);\n}\n\n// Validate date format\nif (data.date && !Date.parse(data.date)) {\n  throw new Error('Invalid date format');\n}\n\n// Validate amount\nif (data.totalAmount && isNaN(parseFloat(data.totalAmount))) {\n  throw new Error('Invalid total amount');\n}\n\nreturn { json: data };"
+      },
+      "id": "a1b2c3d4-5e6f-7g8h-9i0j-k1l2m3n4o5p6",
+      "name": "Validate Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        450
+      ]
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "headerAuth",
+        "headerParameters": [
+          {
+            "name": "Authorization",
+            "value": "Bearer {{ $env.OPENAI_API_KEY }}"
+          },
+          {
+            "name": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "bodyParameters": [
+          {
+            "name": "model",
+            "value": "gpt-4"
+          },
+          {
+            "name": "messages",
+            "value": "[{'role':'system','content':'You are an AI model that processes invoice data and formats it appropriately for further processing. Ensure all monetary values are properly formatted and dates are in ISO format.'},{'role':'user','content':'Invoice data:\n' + JSON.stringify($json)}]"
+          },
+          {
+            "name": "temperature",
+            "value": 0.1
+          }
+        ],
+        "options": {
+          "bodyContentType": "json"
+        }
+      },
+      "id": "http-format-data",
+      "name": "Format Invoice Data (HTTP)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        680,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Structured Output Parser\nconst invoiceData = $input.first().json;\n\n// Parse and structure the invoice data\nconst structuredData = {\n  invoiceNumber: invoiceData.invoiceNumber || '',\n  date: invoiceData.date || '',\n  vendor: {\n    name: invoiceData.vendor?.name || '',\n    address: invoiceData.vendor?.address || '',\n    taxId: invoiceData.vendor?.taxId || '',\n    email: invoiceData.vendor?.email || ''\n  },\n  lineItems: (invoiceData.lineItems || []).map(item => ({\n    description: item.description || '',\n    quantity: item.quantity || 0,\n    unitPrice: item.unitPrice || 0,\n    amount: item.amount || 0\n  })),\n  totalAmount: parseFloat(invoiceData.totalAmount) || 0,\n  currency: invoiceData.currency || 'USD',\n  dueDate: invoiceData.dueDate || '',\n  status: 'processed',\n  processedAt: new Date().toISOString(),\n  metadata: {\n    originalFileName: invoiceData.originalFileName || '',\n    processingVersion: '1.0',\n    confidence: invoiceData.confidence || 0.8\n  }\n};\n\nreturn { json: structuredData };"
+      },
+      "id": "4d5e6f7g-8h9i-0j1k-2l3m-n4o5p6q7r8s9",
+      "name": "Structured Output Parser",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        750
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "fileContent": "={{ JSON.stringify($json, null, 2) }}",
+        "fileName": "invoice_{{ $json.invoiceNumber }}_{{ $now.format('YYYY-MM-DD') }}.json",
+        "parents": {
+          "__rl": true,
+          "value": "={{ $env.GOOGLE_DRIVE_FOLDER_ID }}",
+          "mode": "list",
+          "cachedResultName": "Invoices"
+        }
+      },
+      "id": "5e6f7g8h-9i0j-1k2l-3m4n-o5p6q7r8s9t0",
+      "name": "new invoice",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "fileId": "={{ $json.id }}",
+        "updateFields": {
+          "name": "processed_invoice_{{ $json.invoiceNumber }}_{{ $now.format('YYYY-MM-DD') }}.json"
+        }
+      },
+      "id": "6f7g8h9i-0j1k-2l3m-4n5o-p6q7r8s9t0u1",
+      "name": "update invoice",
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": "={{ $json.id }}",
+        "options": {
+          "fileName": "invoice_{{ $json.invoiceNumber }}_final.pdf"
+        }
+      },
+      "id": "7g8h9i0j-1k2l-3m4n-5o6p-q7r8s9t0u1v2",
+      "name": "download invoice",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1340,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "subject": "Invoice {{ $json.invoiceNumber }} - Processing Complete",
+        "message": "Dear Team,\n\nThe invoice {{ $json.invoiceNumber }} from {{ $json.vendor.name }} has been successfully processed.\n\nInvoice Details:\n- Invoice Number: {{ $json.invoiceNumber }}\n- Date: {{ $json.date }}\n- Vendor: {{ $json.vendor.name }}\n- Total Amount: {{ $json.currency }} {{ $json.totalAmount }}\n- Due Date: {{ $json.dueDate }}\n- Status: {{ $json.status }}\n- Processing Time: {{ $json.processedAt }}\n\nLine Items:\n{{ $json.lineItems.map(item => `- ${item.description}: ${item.quantity} x ${item.unitPrice} = ${item.amount}`).join('\\n') }}\n\nThe processed invoice document has been saved to Google Drive and is ready for review.\n\nBest regards,\nInvoice Processing System",
+        "options": {
+          "attachments": [
+            {
+              "name": "invoice_{{ $json.invoiceNumber }}_final.pdf",
+              "data": "={{ $binary.data }}"
+            }
+          ]
+        }
+      },
+      "id": "8h9i0j1k-2l3m-4n5o-6p7q-r8s9t0u1v2w3",
+      "name": "invoice email draft",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "subject": "Invoice Processing Error",
+        "message": "An error occurred while processing invoice {{ $json.fileName }}:\n\nError: {{ $json.error }}\n\nPlease review the file and try again.",
+        "to": "={{ $env.ERROR_NOTIFICATION_EMAIL }}"
+      },
+      "id": "b2c3d4e5-6f7g-8h9i-0j1k-l2m3n4o5p6q7",
+      "name": "Error Notification",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        450
+      ]
+    }
+  ],
+  "connections": {
+    "Check Every Minute": {
+      "main": [
+        [
+          {
+            "node": "Scan Invoices Folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scan Invoices Folder": {
+      "main": [
+        [
+          {
+            "node": "Validate File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate File": {
+      "main": [
+        [
+          {
+            "node": "Extract Invoice Data (HTTP)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Invoice Data (HTTP)": {
+      "main": [
+        [
+          {
+            "node": "Validate Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Data": {
+      "main": [
+        [
+          {
+            "node": "Format Invoice Data (HTTP)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Invoice Data (HTTP)": {
+      "main": [
+        [
+          {
+            "node": "Structured Output Parser",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "main": [
+        [
+          {
+            "node": "new invoice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "new invoice": {
+      "main": [
+        [
+          {
+            "node": "update invoice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "update invoice": {
+      "main": [
+        [
+          {
+            "node": "download invoice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "download invoice": {
+      "main": [
+        [
+          {
+            "node": "invoice email draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "saveManualExecutions": true,
+    "errorWorkflow": "Error Notification"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2025-05-23T22:46:47.000Z",
+      "updatedAt": "2025-05-23T22:46:47.000Z",
+      "id": "1",
+      "name": "invoice-processing"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2025-05-23T22:46:47.000Z",
+  "versionId": "1"
+}
