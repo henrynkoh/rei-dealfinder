@@ -1,0 +1,33 @@
+INVOICE
+
+Invoice Number: INV-2024-001
+Date: 2024-03-20
+Due Date: 2024-04-20
+
+Vendor Information:
+Name: Tech Solutions Inc.
+Address: 123 Tech Street, Silicon Valley, CA 94043
+Tax ID: TAX-123456789
+Email: billing@techsolutions.com
+
+Line Items:
+1. Cloud Hosting Service
+   Quantity: 1
+   Unit Price: $500.00
+   Amount: $500.00
+
+2. Software License
+   Quantity: 5
+   Unit Price: $100.00
+   Amount: $500.00
+
+3. Technical Support
+   Quantity: 10
+   Unit Price: $50.00
+   Amount: $500.00
+
+Total Amount: $1,500.00
+Currency: USD
+
+Payment Terms: Net 30
+Status: Pending 

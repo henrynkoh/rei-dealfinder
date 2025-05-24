@@ -1,0 +1,33 @@
+INVOICE
+
+Invoice Number: INV-2024-002
+Date: 2024-06-01
+Due Date: 2024-06-30
+
+Vendor Information:
+Name: Acme Supplies Ltd.
+Address: 456 Market Road, Springfield, IL 62704
+Tax ID: ACME-987654321
+Email: accounts@acmesupplies.com
+
+Line Items:
+1. Office Chairs
+   Quantity: 10
+   Unit Price: $120.00
+   Amount: $1,200.00
+
+2. Desks
+   Quantity: 5
+   Unit Price: $250.00
+   Amount: $1,250.00
+
+3. Delivery Fee
+   Quantity: 1
+   Unit Price: $100.00
+   Amount: $100.00
+
+Total Amount: $2,550.00
+Currency: USD
+
+Payment Terms: Net 30
+Status: Unpaid 
